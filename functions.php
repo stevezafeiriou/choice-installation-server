@@ -85,8 +85,6 @@ function create_custom_image($data) {
     return 'Image added successfully. Unvalidated images older than 15 minutes have been deleted.';
 }
 
-
-
 // Register custom endpoint for handling GET all items request
 add_action('rest_api_init', function () {
     register_rest_route('choice/v1', '/image-data/', array(
