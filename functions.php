@@ -268,6 +268,7 @@ function handle_preflight() {
         $allowed_origins = [
             'http://192.168.237.249:3000',
 			'http://192.168.237.253:3000',
+            'https://choice.stevezafeiriou.com',
 			//'http://192.168.1.82:3000',
         ];
 
