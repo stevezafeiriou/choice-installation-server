@@ -1,8 +1,88 @@
 <?php
 
-/* CHOICE IMPLEMENTATION ENDPOINTS START HERE */
+/* CHOICE IMPLEMENTATION STARTS HERE */
 
-//GET AND POST ITEMS
+/* CORS Handling Functions */
+
+// Function to add CORS headers for Image Data and Subscription Endpoints
+function add_image_data_subscription_cors_headers() {
+    // List of allowed origins
+    $allowed_origins = [
+        'http://192.168.237.249:3000',
+        'http://192.168.237.253:3000',
+        'https://choice.stevezafeiriou.com',
+    ];
+
+    // Get the origin of the request
+    $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
+
+    // Check if the origin is in the allowed origins list
+    if (in_array($origin, $allowed_origins)) {
+        header("Access-Control-Allow-Origin: $origin");
+    } else {
+        header("Access-Control-Allow-Origin: 'none'");
+    }
+
+    header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
+    header("Access-Control-Allow-Credentials: true");
+    header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
+}
+
+add_action('rest_api_init', 'add_image_data_subscription_cors_headers');
+add_action('wp_head', 'add_image_data_subscription_cors_headers');
+add_action('wp_footer', 'add_image_data_subscription_cors_headers');
+
+// Handle preflight requests for Image Data and Subscription Endpoints
+function handle_image_data_subscription_preflight() {
+    if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+        // List of allowed origins
+        $allowed_origins = [
+            'http://192.168.237.249:3000',
+            'http://192.168.237.253:3000',
+            'https://choice.stevezafeiriou.com',
+        ];
+
+        // Get the origin of the request
+        $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
+
+        // Check if the origin is in the allowed origins list
+        if (in_array($origin, $allowed_origins)) {
+            header("Access-Control-Allow-Origin: $origin");
+        } else {
+            header("Access-Control-Allow-Origin: 'none'");
+        }
+
+        header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
+        header("Access-Control-Allow-Credentials: true");
+        header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
+        exit;
+    }
+}
+
+add_action('init', 'handle_image_data_subscription_preflight');
+
+// Function to add CORS headers for Firmware Endpoints
+function add_firmware_cors_headers() {
+    header("Access-Control-Allow-Origin: *");
+    header("Access-Control-Allow-Methods: GET, OPTIONS");
+    header("Access-Control-Allow-Credentials: true");
+    header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
+}
+
+// Handle preflight requests for Firmware Endpoints
+function handle_firmware_preflight() {
+    if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+        header("Access-Control-Allow-Origin: *");
+        header("Access-Control-Allow-Methods: GET, OPTIONS");
+        header("Access-Control-Allow-Credentials: true");
+        header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
+        exit;
+    }
+}
+
+add_action('init', 'handle_firmware_preflight');
+
+/* Generated Images Data Endpoints (Table: custom_images) */
 
 // Register custom endpoint for handling POST request to create a new image
 add_action('rest_api_init', function () {
@@ -67,8 +147,8 @@ function create_custom_image($data) {
             'name' => $name,
             'artist' => $artist,
             'attributes' => $attributes,
-            'created_by_chip_id' => $chip_id, // Add this line
-            'chip_id_edition' => $chip_id_edition, // Add this line
+            'created_by_chip_id' => $chip_id,
+            'chip_id_edition' => $chip_id_edition,
             'validated' => false,
             'created_at' => current_time('mysql'), // Use current timestamp
         )
@@ -130,8 +210,6 @@ function get_all_custom_images() {
     return $results;
 }
 
-
-
 // Register custom endpoint for handling GET by ID request
 add_action('rest_api_init', function () {
     register_rest_route('choice/v1', '/image-data/(?P<id>\S+)', array(
@@ -167,10 +245,6 @@ function get_custom_image_by_id($data) {
 
     return $result;
 }
-
-
-
-
 
 // Register custom endpoint for handling DELETE by ID request
 add_action('rest_api_init', function () {
@@ -234,66 +308,7 @@ function validate_custom_image($data) {
     return 'Image validated successfully.';
 }
 
-// Function to add CORS headers
-function add_cors_http_header() {
-    // List of allowed origins
-    $allowed_origins = [
-        'http://192.168.237.249:3000',
-		'http://192.168.237.253:3000',
-    ];
-
-    // Get the origin of the request
-    $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-
-    // Check if the origin is in the allowed origins list
-    if (in_array($origin, $allowed_origins)) {
-        header("Access-Control-Allow-Origin: $origin");
-    } else {
-        header("Access-Control-Allow-Origin: 'none'");
-    }
-
-    header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE");
-    header("Access-Control-Allow-Credentials: true");
-    header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
-}
-
-add_action('rest_api_init', 'add_cors_http_header');
-add_action('wp_head', 'add_cors_http_header');
-add_action('wp_footer', 'add_cors_http_header');
-
-// Handle preflight requests
-function handle_preflight() {
-    if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-        // List of allowed origins
-        $allowed_origins = [
-            'http://192.168.237.249:3000',
-			'http://192.168.237.253:3000',
-            'https://choice.stevezafeiriou.com',
-			//'http://192.168.1.82:3000',
-        ];
-
-        // Get the origin of the request
-        $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-
-        // Check if the origin is in the allowed origins list
-        if (in_array($origin, $allowed_origins)) {
-            header("Access-Control-Allow-Origin: $origin");
-        } else {
-            header("Access-Control-Allow-Origin: 'none'");
-        }
-
-        header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE");
-        header("Access-Control-Allow-Credentials: true");
-        header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
-        exit;
-    }
-}
-
-add_action('init', 'handle_preflight');
-
-
-
-
+// Function to retrieve recent unvalidated images
 function get_recent_unvalidated_images() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'custom_images'; // Use the exact table name
@@ -342,8 +357,6 @@ function get_recent_unvalidated_images() {
     return $results;
 }
 
-
-
 add_action('rest_api_init', function () {
     register_rest_route('choice/v1', '/recent-unvalidated-images', array(
         'methods' => 'GET',
@@ -355,30 +368,7 @@ add_action('rest_api_init', function () {
     error_log(print_r(rest_get_server()->get_routes(), true));
 });
 
-
-
-
-// Register custom REST API route
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/firmware', array(
-        'methods' => 'GET',
-        'callback' => 'get_firmware_data',
-    ));
-});
-
-// Callback function to return firmware data
-function get_firmware_data() {
-    $firmware_data = array(
-        'version' => '1.0.0', // Replace with your current firmware version
-        'file' => 'https://stevezafeiriou.com/choice-firmware/choice_v1.0.0.bin', // URL to the uploaded firmware binary
-    );
-
-    return new WP_REST_Response($firmware_data, 200);
-}
-
-/* CHOICE IMPLEMENTATION ENDPOINTS ENDS HERE */
-
-/* CHOICE SUBSCRIPTION DB STARTS HERE */
+/* Subscription Endpoints To Save Generations (Tables: custom_choice_subs, validated_ids) */
 
 // Handle subscription request
 function handle_subscription(WP_REST_Request $request) {
@@ -560,4 +550,52 @@ add_action('rest_api_init', function () {
     ));
 });
 
-/* CHOICE SUBSCRIPTION DB ENDS HERE */
+/* Firmware Endpoints (Table: firmware_changelog) */
+
+// Register custom REST API route
+add_action('rest_api_init', function () {
+    register_rest_route('choice/v1', '/firmware', array(
+        'methods' => 'GET',
+        'callback' => 'get_firmware_data',
+        'permission_callback' => function () {
+            add_firmware_cors_headers();
+            return true;
+        },
+    ));
+});
+
+// Callback function to return firmware data
+function get_firmware_data() {
+    $firmware_data = array(
+        'version' => '1.0.0', // Replace with your current firmware version
+        'file' => 'https://stevezafeiriou.com/choice-firmware/choice_v1.0.0.bin', // URL to the uploaded firmware binary
+        'changelog_url' => 'https://stevezafeiriou.com/choice-firmware/CHANGELOG.md', // URL to the changelog file
+    );
+
+    return new WP_REST_Response($firmware_data, 200);
+}
+
+// Register custom REST API route for firmware changelog
+add_action('rest_api_init', function () {
+    register_rest_route('choice/v1', '/firmware/changelog', array(
+        'methods' => 'GET',
+        'callback' => 'get_firmware_changelog',
+        'permission_callback' => function () {
+            add_firmware_cors_headers();
+            return true;
+        },
+    ));
+});
+
+// Callback function to return firmware changelog data
+function get_firmware_changelog() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'firmware_changelog';
+
+    $results = $wpdb->get_results("SELECT version, change_log, added_date FROM $table_name", ARRAY_A);
+
+    return new WP_REST_Response($results, 200);
+}
+
+/* CHOICE IMPLEMENTATION ENDS HERE */
+
