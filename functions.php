@@ -1,6 +1,5 @@
 <?php
-
-/* CHOICE IMPLEMENTATION STARTS HERE */
+* CHOICE IMPLEMENTATION STARTS HERE */
 
 /* CORS Handling Functions */
 
@@ -8,7 +7,6 @@
 function add_image_data_subscription_cors_headers() {
     // List of allowed origins
     $allowed_origins = [
-        'http://192.168.237.253:3000',
         'https://choice.stevezafeiriou.com',
         'https://www.choice.stevezafeiriou.com',
     ];
@@ -21,6 +19,8 @@ function add_image_data_subscription_cors_headers() {
         header("Access-Control-Allow-Origin: $origin");
     } else {
         header("Access-Control-Allow-Origin: 'none'");
+        http_response_code(403);
+        exit;
     }
 
     header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
@@ -39,7 +39,6 @@ function handle_image_data_subscription_preflight() {
     if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
         // List of allowed origins
         $allowed_origins = [
-            'http://192.168.237.253:3000',
             'https://choice.stevezafeiriou.com',
             'https://www.choice.stevezafeiriou.com',
         ];
@@ -52,6 +51,8 @@ function handle_image_data_subscription_preflight() {
             header("Access-Control-Allow-Origin: $origin");
         } else {
             header("Access-Control-Allow-Origin: 'none'");
+            http_response_code(403);
+            exit;
         }
 
         header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
@@ -72,6 +73,11 @@ function add_firmware_cors_headers() {
     return true;
 }
 
+add_action('rest_api_init', 'add_firmware_cors_headers');
+add_action('wp_head', 'add_firmware_cors_headers');
+add_action('wp_footer', 'add_firmware_cors_headers');
+
+
 // Handle preflight requests for Firmware Endpoints
 function handle_firmware_preflight() {
     if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
@@ -85,11 +91,11 @@ function handle_firmware_preflight() {
 
 add_action('init', 'handle_firmware_preflight');
 
+
 // Add CORS headers for JWT Authentication endpoints
 function add_jwt_cors_headers() {
     // List of allowed origins
     $allowed_origins = [
-        'http://192.168.237.253:3000',
         'https://choice.stevezafeiriou.com',
         'https://www.choice.stevezafeiriou.com',
     ];
@@ -102,6 +108,8 @@ function add_jwt_cors_headers() {
         header("Access-Control-Allow-Origin: $origin");
     } else {
         header("Access-Control-Allow-Origin: 'none'");
+        http_response_code(403);
+        exit;
     }
 
     header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
@@ -114,12 +122,12 @@ add_action('rest_api_init', 'add_jwt_cors_headers');
 add_action('wp_head', 'add_jwt_cors_headers');
 add_action('wp_footer', 'add_jwt_cors_headers');
 
+
 // Handle preflight requests for JWT Authentication endpoints
 function handle_jwt_preflight() {
     if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
         // List of allowed origins
         $allowed_origins = [
-            'http://192.168.237.253:3000',
             'https://choice.stevezafeiriou.com',
             'https://www.choice.stevezafeiriou.com',
         ];
@@ -132,6 +140,8 @@ function handle_jwt_preflight() {
             header("Access-Control-Allow-Origin: $origin");
         } else {
             header("Access-Control-Allow-Origin: 'none'");
+            http_response_code(403);
+            exit;
         }
 
         header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
@@ -142,6 +152,7 @@ function handle_jwt_preflight() {
 }
 
 add_action('init', 'handle_jwt_preflight');
+
 
 /* Generated Images Data Endpoints (Table: custom_images) */
 
