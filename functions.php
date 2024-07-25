@@ -1,169 +1,144 @@
 <?php
-* CHOICE IMPLEMENTATION STARTS HERE */
+
+/* CHOICE IMPLEMENTATION STARTS HERE */
 
 /* CORS Handling Functions */
 
-// Function to add CORS headers for Image Data, Subscription, and Firmware Endpoints
-function add_image_data_subscription_cors_headers() {
-    // List of allowed origins
+// Function to add CORS headers for specific endpoints
+function add_cors_headers() {
     $allowed_origins = [
         'https://choice.stevezafeiriou.com',
         'https://www.choice.stevezafeiriou.com',
+		'http://192.168.237.253:3000',
     ];
 
-    // Get the origin of the request
     $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
 
-    // Check if the origin is in the allowed origins list
     if (in_array($origin, $allowed_origins)) {
         header("Access-Control-Allow-Origin: $origin");
-    } else {
-        header("Access-Control-Allow-Origin: 'none'");
-        http_response_code(403);
-        exit;
-    }
-
-    header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
-    header("Access-Control-Allow-Credentials: true");
-    header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
-    return true;
-}
-
-// Add CORS headers to REST API endpoints
-add_action('rest_api_init', 'add_image_data_subscription_cors_headers');
-add_action('wp_head', 'add_image_data_subscription_cors_headers');
-add_action('wp_footer', 'add_image_data_subscription_cors_headers');
-
-// Handle preflight requests for Image Data and Subscription Endpoints
-function handle_image_data_subscription_preflight() {
-    if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-        // List of allowed origins
-        $allowed_origins = [
-            'https://choice.stevezafeiriou.com',
-            'https://www.choice.stevezafeiriou.com',
-        ];
-
-        // Get the origin of the request
-        $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-
-        // Check if the origin is in the allowed origins list
-        if (in_array($origin, $allowed_origins)) {
-            header("Access-Control-Allow-Origin: $origin");
-        } else {
-            header("Access-Control-Allow-Origin: 'none'");
-            http_response_code(403);
-            exit;
-        }
-
         header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
         header("Access-Control-Allow-Credentials: true");
         header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
-        exit;
     }
 }
 
-add_action('init', 'handle_image_data_subscription_preflight');
-
-// Function to add CORS headers for Firmware Endpoints accessible to all devices
-function add_firmware_cors_headers() {
-    header("Access-Control-Allow-Origin: *");
-    header("Access-Control-Allow-Methods: GET, OPTIONS");
-    header("Access-Control-Allow-Credentials: true");
-    header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
-    return true;
-}
-
-add_action('rest_api_init', 'add_firmware_cors_headers');
-add_action('wp_head', 'add_firmware_cors_headers');
-add_action('wp_footer', 'add_firmware_cors_headers');
-
-
-// Handle preflight requests for Firmware Endpoints
-function handle_firmware_preflight() {
+// Handle preflight requests for specific endpoints
+function handle_preflight() {
     if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-        header("Access-Control-Allow-Origin: *");
-        header("Access-Control-Allow-Methods: GET, OPTIONS");
-        header("Access-Control-Allow-Credentials: true");
-        header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
+        add_cors_headers();
         exit;
     }
 }
 
-add_action('init', 'handle_firmware_preflight');
-
-
-// Add CORS headers for JWT Authentication endpoints
-function add_jwt_cors_headers() {
-    // List of allowed origins
-    $allowed_origins = [
-        'https://choice.stevezafeiriou.com',
-        'https://www.choice.stevezafeiriou.com',
+// Apply CORS headers only to specific REST API routes
+function add_cors_headers_to_rest_endpoints($value, $server) {
+    $cors_endpoints = [
+        '/wp-json/choice/v1/image-data',
+        '/wp-json/choice/v1/image-data/(?P<id>\S+)',
+        '/wp-json/choice/v1/recent-unvalidated-images',
+        '/wp-json/choice/v1/subscribe',
+        '/wp-json/choice/v1/firmware',
+        '/wp-json/choice/v1/firmware/changelog',
+        '/wp-json/choice/v1/firmware/upload',
+        '/wp-json/choice/v1/total-devices',
+		'/wp-json/choice/v1/subscribe/list',
     ];
 
-    // Get the origin of the request
-    $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
+    $request_uri = $_SERVER['REQUEST_URI'];
 
-    // Check if the origin is in the allowed origins list
-    if (in_array($origin, $allowed_origins)) {
-        header("Access-Control-Allow-Origin: $origin");
-    } else {
-        header("Access-Control-Allow-Origin: 'none'");
-        http_response_code(403);
-        exit;
-    }
-
-    header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
-    header("Access-Control-Allow-Credentials: true");
-    header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
-    return true;
-}
-
-add_action('rest_api_init', 'add_jwt_cors_headers');
-add_action('wp_head', 'add_jwt_cors_headers');
-add_action('wp_footer', 'add_jwt_cors_headers');
-
-
-// Handle preflight requests for JWT Authentication endpoints
-function handle_jwt_preflight() {
-    if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-        // List of allowed origins
-        $allowed_origins = [
-            'https://choice.stevezafeiriou.com',
-            'https://www.choice.stevezafeiriou.com',
-        ];
-
-        // Get the origin of the request
-        $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-
-        // Check if the origin is in the allowed origins list
-        if (in_array($origin, $allowed_origins)) {
-            header("Access-Control-Allow-Origin: $origin");
-        } else {
-            header("Access-Control-Allow-Origin: 'none'");
-            http_response_code(403);
-            exit;
+    foreach ($cors_endpoints as $endpoint) {
+        if (preg_match('@^' . $endpoint . '$@', $request_uri)) {
+            add_cors_headers();
+            break;
         }
-
-        header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
-        header("Access-Control-Allow-Credentials: true");
-        header("Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With");
-        exit;
     }
+
+    return $value;
 }
 
-add_action('init', 'handle_jwt_preflight');
-
-
-/* Generated Images Data Endpoints (Table: custom_images) */
-
-// Register custom endpoint for handling POST request to create a new image
+// Hook the CORS header addition and preflight handling to REST API init
 add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/image-data/', array(
+    add_action('rest_api_init', 'handle_preflight', 1);
+    add_filter('rest_pre_serve_request', 'add_cors_headers_to_rest_endpoints', 15, 2);
+});
+
+// Ensure JWT Authentication for WP REST API plugin is included
+if (!function_exists('jwt_auth_validate_token')) {
+    include_once(ABSPATH . 'wp-content/plugins/jwt-auth/jwt-auth.php');
+}
+
+// Register endpoints and callbacks
+
+add_action('rest_api_init', function () {
+    register_rest_route('choice/v1', '/image-data', array(
         'methods' => 'POST',
         'callback' => 'create_custom_image',
-        'permission_callback' => 'add_image_data_subscription_cors_headers',
+    ));
+
+    register_rest_route('choice/v1', '/image-data', array(
+        'methods' => 'GET',
+        'callback' => 'get_all_custom_images',
+    ));
+
+    register_rest_route('choice/v1', '/image-data/(?P<id>\S+)', array(
+        'methods' => 'GET',
+        'callback' => 'get_custom_image_by_id',
+    ));
+
+    register_rest_route('choice/v1', '/image-data/(?P<id>\S+)', array(
+        'methods' => 'DELETE',
+        'callback' => 'delete_custom_image_by_id',
+    ));
+
+    register_rest_route('choice/v1', '/image-data/validate', array(
+        'methods' => 'POST',
+        'callback' => 'validate_custom_image',
+    ));
+
+    register_rest_route('choice/v1', '/recent-unvalidated-images', array(
+        'methods' => 'GET',
+        'callback' => 'get_recent_unvalidated_images',
+    ));
+
+    register_rest_route('choice/v1', '/subscribe', array(
+        'methods' => 'POST',
+        'callback' => 'handle_subscription',
+    ));
+	
+	register_rest_route('choice/v1', '/subscribe/list', array(
+        'methods' => 'GET',
+        'callback' => 'get_subscriber_list',
+        'permission_callback' => 'verify_jwt_token_for_list',
+    ));
+
+    register_rest_route('choice/v1', '/subscribe', array(
+        'methods' => 'PUT',
+        'callback' => 'handle_update_subscription',
+    ));
+
+    register_rest_route('choice/v1', '/firmware', array(
+        'methods' => 'GET',
+        'callback' => 'get_firmware_data',
+    ));
+
+    register_rest_route('choice/v1', '/firmware/changelog', array(
+        'methods' => 'GET',
+        'callback' => 'get_firmware_changelog',
+    ));
+
+    register_rest_route('choice/v1', '/firmware/upload', array(
+        'methods' => 'POST',
+        'callback' => 'handle_firmware_upload',
+        'permission_callback' => 'verify_jwt_token',
+    ));
+
+    register_rest_route('choice/v1', '/total-devices', array(
+        'methods' => 'GET',
+        'callback' => 'get_total_devices',
     ));
 });
+
+// Callback functions for endpoints (include your existing implementations here)
 
 // Callback function for handling POST request to create a new image
 function create_custom_image($data) {
@@ -233,15 +208,6 @@ function create_custom_image($data) {
     return 'Image added successfully. Unvalidated images older than 15 minutes have been deleted.';
 }
 
-// Register custom endpoint for handling GET all items request
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/image-data/', array(
-        'methods' => 'GET',
-        'callback' => 'get_all_custom_images',
-        'permission_callback' => 'add_image_data_subscription_cors_headers',
-    ));
-});
-
 // Callback function for handling GET all items request
 function get_all_custom_images() {
     global $wpdb;
@@ -279,15 +245,6 @@ function get_all_custom_images() {
     return $results;
 }
 
-// Register custom endpoint for handling GET by ID request
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/image-data/(?P<id>\S+)', array(
-        'methods' => 'GET',
-        'callback' => 'get_custom_image_by_id',
-        'permission_callback' => 'add_image_data_subscription_cors_headers',
-    ));
-});
-
 // Callback function for handling GET by ID request
 function get_custom_image_by_id($data) {
     $id = $data['id'];
@@ -316,15 +273,6 @@ function get_custom_image_by_id($data) {
     return $result;
 }
 
-// Register custom endpoint for handling DELETE by ID request
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/image-data/(?P<id>\S+)', array(
-        'methods' => 'DELETE',
-        'callback' => 'delete_custom_image_by_id',
-        'permission_callback' => 'add_image_data_subscription_cors_headers',
-    ));
-});
-
 // Callback function for handling DELETE by ID request
 function delete_custom_image_by_id($data) {
     $id = $data['id'];
@@ -336,15 +284,6 @@ function delete_custom_image_by_id($data) {
 
     return 'Image deleted successfully.';
 }
-
-// Register custom endpoint for handling POST request to validate an image
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/image-data/validate/', array(
-        'methods' => 'POST',
-        'callback' => 'validate_custom_image',
-        'permission_callback' => 'add_image_data_subscription_cors_headers',
-    ));
-});
 
 // Callback function for handling POST request to validate an image
 function validate_custom_image($data) {
@@ -428,19 +367,6 @@ function get_recent_unvalidated_images() {
 
     return $results;
 }
-
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/recent-unvalidated-images', array(
-        'methods' => 'GET',
-        'callback' => 'get_recent_unvalidated_images',
-        'permission_callback' => 'add_image_data_subscription_cors_headers',
-    ));
-
-    // Debug registered routes
-    error_log(print_r(rest_get_server()->get_routes(), true));
-});
-
-/* Subscription Endpoints To Save Generations (Tables: custom_choice_subs, validated_ids) */
 
 // Handle subscription request
 function handle_subscription(WP_REST_Request $request) {
@@ -606,33 +532,6 @@ function handle_update_subscription(WP_REST_Request $request) {
     return 'User subscription updated successfully.';
 }
 
-// Register REST API endpoint for subscription and update
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/subscribe', array(
-        array(
-            'methods' => 'POST',
-            'callback' => 'handle_subscription',
-            'permission_callback' => 'add_image_data_subscription_cors_headers',
-        ),
-        array(
-            'methods' => 'PUT',
-            'callback' => 'handle_update_subscription',
-            'permission_callback' => 'add_image_data_subscription_cors_headers',
-        ),
-    ));
-});
-
-/* Firmware Endpoints (Table: firmware_changelog) */
-
-// Register custom REST API route
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/firmware', array(
-        'methods' => 'GET',
-        'callback' => 'get_firmware_data',
-        'permission_callback' => 'add_firmware_cors_headers',
-    ));
-});
-
 // Function to get the firmware data
 function get_firmware_data() {
     global $wpdb;
@@ -652,15 +551,6 @@ function get_firmware_data() {
     return new WP_REST_Response($firmware_data, 200);
 }
 
-// Register custom REST API route for firmware changelog
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/firmware/changelog', array(
-        'methods' => 'GET',
-        'callback' => 'get_firmware_changelog',
-        'permission_callback' => 'add_firmware_cors_headers',
-    ));
-});
-
 // Callback function to return firmware changelog data
 function get_firmware_changelog() {
     global $wpdb;
@@ -670,15 +560,6 @@ function get_firmware_changelog() {
 
     return new WP_REST_Response($results, 200);
 }
-
-// Register the REST API endpoint
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/total-devices', array(
-        'methods' => 'GET',
-        'callback' => 'get_total_devices',
-        'permission_callback' => 'add_image_data_subscription_cors_headers',
-    ));
-});
 
 // Function to get the total number of devices
 function get_total_devices() {
@@ -692,11 +573,6 @@ function get_total_devices() {
 
     // Return the result
     return new WP_REST_Response(array('total' => $total_devices), 200);
-}
-
-// Ensure JWT Authentication for WP REST API plugin is included
-if ( ! function_exists( 'jwt_auth_validate_token' ) ) {
-    include_once( ABSPATH . 'wp-content/plugins/jwt-auth/jwt-auth.php' );
 }
 
 // Function to verify if the user has a valid JWT token
@@ -834,17 +710,71 @@ function handle_firmware_upload(WP_REST_Request $request) {
     return new WP_REST_Response('Firmware updated successfully.', 200);
 }
 
-// Register custom REST API route for firmware upload
-add_action('rest_api_init', function () {
-    register_rest_route('choice/v1', '/firmware/upload', array(
-        'methods' => 'POST',
-        'callback' => 'handle_firmware_upload',
-        'permission_callback' => 'verify_jwt_token',
-    ));
-});
 
+// Function to verify if the user has a valid JWT token
+function verify_jwt_token_for_list($request) {
+    // Get the JWT token from the Authorization header
+    $auth_header = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
 
+    if (!$auth_header) {
+        return new WP_Error('missing_auth_header', 'Authorization header is missing', array('status' => 403));
+    }
 
+    // Remove "Bearer " from the beginning of the token
+    list($token) = sscanf($auth_header, 'Bearer %s');
+
+    if (!$token) {
+        return new WP_Error('invalid_auth_header', 'Invalid Authorization header', array('status' => 403));
+    }
+
+    // Validate the token using the plugin's validation endpoint
+    $response = wp_remote_post(
+        rest_url('/jwt-auth/v1/token/validate'),
+        array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $token,
+            ),
+        )
+    );
+
+    if (is_wp_error($response)) {
+        return new WP_Error('token_validation_failed', 'Token validation failed', array('status' => 403));
+    }
+
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+
+    if (isset($data['code']) && $data['code'] !== 'jwt_auth_valid_token') {
+        return new WP_Error('invalid_token', 'Invalid JWT token', array('status' => 403));
+    }
+
+    return true;
+}
+
+// Function to handle the new endpoint for listing subscribers
+function get_subscriber_list(WP_REST_Request $request) {
+    global $wpdb;
+    $subs_table = $wpdb->prefix . 'custom_choice_subs'; // Make sure this matches your table name
+    $validated_table = $wpdb->prefix . 'validated_ids'; // Make sure this matches your table name
+
+    // Retrieve all subscribers and their validated IDs
+    $subscribers = $wpdb->get_results("SELECT user_email, validated_ids FROM $subs_table", ARRAY_A);
+
+    // Prepare the response data
+    $response_data = [];
+
+    foreach ($subscribers as $subscriber) {
+        $email = $subscriber['user_email'];
+        $validated_ids = maybe_unserialize($subscriber['validated_ids']);
+
+        $response_data[] = [
+            'email' => $email,
+            'validated_ids' => $validated_ids,
+        ];
+    }
+
+    return new WP_REST_Response($response_data, 200);
+}
 
 
 // Allow .bin file uploads
