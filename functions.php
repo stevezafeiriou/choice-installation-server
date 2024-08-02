@@ -1,5 +1,8 @@
 <?php
 
+
+
+
 /* CHOICE IMPLEMENTATION STARTS HERE */
 
 /* CORS Handling Functions */
@@ -9,7 +12,8 @@ function add_cors_headers() {
     $allowed_origins = [
         'https://choice.stevezafeiriou.com',
         'https://www.choice.stevezafeiriou.com',
-		'http://192.168.237.253:3000',
+        'http://192.168.237.253:3000',
+      //'http://192.168.237.249:3000',
     ];
 
     $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
@@ -40,8 +44,11 @@ function add_cors_headers_to_rest_endpoints($value, $server) {
         '/wp-json/choice/v1/firmware',
         '/wp-json/choice/v1/firmware/changelog',
         '/wp-json/choice/v1/firmware/upload',
-        '/wp-json/choice/v1/total-devices',
-		'/wp-json/choice/v1/subscribe/list',
+        '/wp-json/choice/v1/subscribe/list',
+		'/wp-json/choice/v1/subscribe/donation/update',
+        '/wp-json/choice/v1/devices',
+        '/wp-json/choice/v1/devices/total',
+		'/wp-json/choice/v1/collected',
     ];
 
     $request_uri = $_SERVER['REQUEST_URI'];
@@ -88,6 +95,7 @@ add_action('rest_api_init', function () {
     register_rest_route('choice/v1', '/image-data/(?P<id>\S+)', array(
         'methods' => 'DELETE',
         'callback' => 'delete_custom_image_by_id',
+        'permission_callback' => 'verify_jwt_token',
     ));
 
     register_rest_route('choice/v1', '/image-data/validate', array(
@@ -104,16 +112,22 @@ add_action('rest_api_init', function () {
         'methods' => 'POST',
         'callback' => 'handle_subscription',
     ));
-	
-	register_rest_route('choice/v1', '/subscribe/list', array(
+    
+    register_rest_route('choice/v1', '/subscribe/list', array(
         'methods' => 'GET',
         'callback' => 'get_subscriber_list',
-        'permission_callback' => 'verify_jwt_token_for_list',
+        'permission_callback' => 'verify_jwt_token',
     ));
 
     register_rest_route('choice/v1', '/subscribe', array(
         'methods' => 'PUT',
         'callback' => 'handle_update_subscription',
+    ));
+	
+	register_rest_route('choice/v1', '/subscribe/donation/update', array(
+        'methods' => 'POST',
+        'callback' => 'update_donation_status',
+        'permission_callback' => 'verify_jwt_token', 
     ));
 
     register_rest_route('choice/v1', '/firmware', array(
@@ -132,14 +146,31 @@ add_action('rest_api_init', function () {
         'permission_callback' => 'verify_jwt_token',
     ));
 
-    register_rest_route('choice/v1', '/total-devices', array(
+    register_rest_route('choice/v1', '/devices/total', array(
         'methods' => 'GET',
         'callback' => 'get_total_devices',
     ));
+
+    register_rest_route('choice/v1', '/devices', array(
+        'methods' => 'GET',
+        'callback' => 'get_registered_devices',
+        'permission_callback' => 'verify_jwt_token',
+    ));
+
+    register_rest_route('choice/v1', '/devices', array(
+        'methods' => 'POST',
+        'callback' => 'register_new_device',
+        'permission_callback' => 'verify_jwt_token',
+    ));
+	
+	register_rest_route('choice/v1', '/collected', array(
+        'methods' => 'GET',
+        'callback' => 'get_collected_images_by_email',
+    ));
+	
 });
 
 // Callback functions for endpoints (include your existing implementations here)
-
 // Callback function for handling POST request to create a new image
 function create_custom_image($data) {
     global $wpdb;
@@ -158,6 +189,7 @@ function create_custom_image($data) {
     $artist = sanitize_text_field($imageData['artist']);
     $attributes = maybe_serialize($imageData['attributes']);
     $chip_id = sanitize_text_field($imageData['chip_id']);
+    $grid = maybe_serialize($imageData['grid']);
 
     // Check if the chip_id exists in the registered devices table
     $table_name_devices = $wpdb->prefix . 'registered_devices';
@@ -190,12 +222,17 @@ function create_custom_image($data) {
             'name' => $name,
             'artist' => $artist,
             'attributes' => $attributes,
+            'grid' => $grid,
             'created_by_chip_id' => $chip_id,
             'chip_id_edition' => $chip_id_edition,
             'validated' => false,
             'created_at' => current_time('mysql'), // Use current timestamp
         )
     );
+
+    // Log the created_at time for debugging
+    $created_at = current_time('mysql');
+    error_log("Created at time: $created_at");
 
     // Delete unvalidated images older than 15 minutes
     $wpdb->query(
@@ -205,7 +242,15 @@ function create_custom_image($data) {
         )
     );
 
-    return 'Image added successfully. Unvalidated images older than 15 minutes have been deleted.';
+    // Check the number of rows affected by the delete query
+    $rows_affected = $wpdb->rows_affected;
+    error_log("Rows deleted: $rows_affected");
+
+    if ($rows_affected > 0) {
+        return 'Image added successfully. Unvalidated images older than 15 minutes have been deleted.';
+    } else {
+        return 'Image added successfully. No unvalidated images older than 15 minutes found.';
+    }
 }
 
 // Callback function for handling GET all items request
@@ -230,12 +275,20 @@ function get_all_custom_images() {
         $result['time_since_creation'] = $time_diff_human;
 
         // Unserialize the attributes field and extract the Acceleration trait
-        $attributes = unserialize($result['attributes']);
-        foreach ($attributes as $attribute) {
-            if ($attribute['trait_type'] === 'Acceleration') {
-                $result['acceleration'] = $attribute['value'];
-                break;
+        $attributes = maybe_unserialize($result['attributes']);
+        if (is_array($attributes)) {
+            foreach ($attributes as $attribute) {
+                if ($attribute['trait_type'] === 'Acceleration') {
+                    $result['acceleration'] = $attribute['value'];
+                    break;
+                }
             }
+        }
+
+        // Unserialize the grid field
+        $grid = maybe_unserialize($result['grid']);
+        if (is_array($grid)) {
+            $result['grid'] = $grid;
         }
 
         // Remove the attributes field
@@ -252,19 +305,27 @@ function get_custom_image_by_id($data) {
     global $wpdb;
     $table_name = $wpdb->prefix . 'custom_images';
 
-    $result = $wpdb->get_row($wpdb->prepare("SELECT id, description, image, name, artist, validated, created_at, created_by_chip_id, chip_id_edition, attributes FROM $table_name WHERE id = %s", $id), ARRAY_A);
+    $result = $wpdb->get_row($wpdb->prepare("SELECT id, description, image, name, artist, validated, created_at, created_by_chip_id, chip_id_edition, attributes, grid FROM $table_name WHERE id = %s", $id), ARRAY_A);
 
     if (!$result) {
         return new WP_Error('not_found', 'Image not found', array('status' => 404));
     }
 
     // Unserialize the attributes field and extract the Acceleration trait
-    $attributes = unserialize($result['attributes']);
-    foreach ($attributes as $attribute) {
-        if ($attribute['trait_type'] === 'Acceleration') {
-            $result['acceleration'] = $attribute['value'];
-            break;
+    $attributes = maybe_unserialize($result['attributes']);
+    if (is_array($attributes)) {
+        foreach ($attributes as $attribute) {
+            if ($attribute['trait_type'] === 'Acceleration') {
+                $result['acceleration'] = $attribute['value'];
+                break;
+            }
         }
+    }
+
+    // Unserialize the grid field
+    $grid = maybe_unserialize($result['grid']);
+    if (is_array($grid)) {
+        $result['grid'] = $grid;
     }
 
     // Remove the attributes field
@@ -326,7 +387,7 @@ function get_recent_unvalidated_images() {
 
     // Retrieve the 5 most recent unvalidated images
     $query = $wpdb->prepare(
-        "SELECT id, description, image, name, artist, validated, created_at, created_by_chip_id, chip_id_edition, attributes FROM $table_name WHERE validated = 0 ORDER BY created_at DESC LIMIT %d",
+        "SELECT id, description, image, name, artist, validated, created_at, created_by_chip_id, chip_id_edition, attributes, grid FROM $table_name WHERE validated = 0 ORDER BY created_at DESC LIMIT %d",
         5
     );
 
@@ -353,12 +414,20 @@ function get_recent_unvalidated_images() {
         $result['time_since_creation'] = $time_diff_human;
 
         // Unserialize the attributes field and extract the Acceleration trait
-        $attributes = unserialize($result['attributes']);
-        foreach ($attributes as $attribute) {
-            if ($attribute['trait_type'] === 'Acceleration') {
-                $result['acceleration'] = $attribute['value'];
-                break;
+        $attributes = maybe_unserialize($result['attributes']);
+        if (is_array($attributes)) {
+            foreach ($attributes as $attribute) {
+                if ($attribute['trait_type'] === 'Acceleration') {
+                    $result['acceleration'] = $attribute['value'];
+                    break;
+                }
             }
+        }
+
+        // Unserialize the grid field
+        $grid = maybe_unserialize($result['grid']);
+        if (is_array($grid)) {
+            $result['grid'] = $grid;
         }
 
         // Remove the attributes field
@@ -369,9 +438,11 @@ function get_recent_unvalidated_images() {
 }
 
 // Handle subscription request
+// Handle subscription request
 function handle_subscription(WP_REST_Request $request) {
     // Retrieve email from request body and sanitize
     $email = sanitize_email($request->get_param('email'));
+    $donate = filter_var($request->get_param('donate'), FILTER_VALIDATE_BOOLEAN);
 
     // Validate email address
     if (!is_email($email)) {
@@ -409,7 +480,7 @@ function handle_subscription(WP_REST_Request $request) {
     $existing_entry = $wpdb->get_row($wpdb->prepare("SELECT * FROM $subs_table WHERE user_email = %s", $email), ARRAY_A);
 
     if ($existing_entry) {
-        // Email already exists, update validated IDs only
+        // Email already exists, update validated IDs and donate status
         $current_validated_ids = maybe_unserialize($existing_entry['validated_ids']);
         $updated_ids = array_unique(array_merge($current_validated_ids, $validated_ids));
 
@@ -421,9 +492,12 @@ function handle_subscription(WP_REST_Request $request) {
         // Update the record in the subscriptions table
         $wpdb->update(
             $subs_table,
-            array('validated_ids' => maybe_serialize($updated_ids)),
+            array(
+                'validated_ids' => maybe_serialize($updated_ids),
+                'donate' => $donate
+            ),
             array('user_email' => $email),
-            array('%s'),
+            array('%s', '%d'),
             array('%s')
         );
 
@@ -442,9 +516,10 @@ function handle_subscription(WP_REST_Request $request) {
             $subs_table,
             array(
                 'user_email' => $email,
-                'validated_ids' => maybe_serialize($validated_ids)
+                'validated_ids' => maybe_serialize($validated_ids),
+                'donate' => $donate
             ),
-            array('%s', '%s')
+            array('%s', '%s', '%d')
         );
 
         // Insert into validated IDs table
@@ -477,6 +552,7 @@ function handle_subscription(WP_REST_Request $request) {
 
     return 'User subscribed successfully.';
 }
+
 
 // Handle update request
 function handle_update_subscription(WP_REST_Request $request) {
@@ -710,47 +786,7 @@ function handle_firmware_upload(WP_REST_Request $request) {
     return new WP_REST_Response('Firmware updated successfully.', 200);
 }
 
-
-// Function to verify if the user has a valid JWT token
-function verify_jwt_token_for_list($request) {
-    // Get the JWT token from the Authorization header
-    $auth_header = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
-
-    if (!$auth_header) {
-        return new WP_Error('missing_auth_header', 'Authorization header is missing', array('status' => 403));
-    }
-
-    // Remove "Bearer " from the beginning of the token
-    list($token) = sscanf($auth_header, 'Bearer %s');
-
-    if (!$token) {
-        return new WP_Error('invalid_auth_header', 'Invalid Authorization header', array('status' => 403));
-    }
-
-    // Validate the token using the plugin's validation endpoint
-    $response = wp_remote_post(
-        rest_url('/jwt-auth/v1/token/validate'),
-        array(
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $token,
-            ),
-        )
-    );
-
-    if (is_wp_error($response)) {
-        return new WP_Error('token_validation_failed', 'Token validation failed', array('status' => 403));
-    }
-
-    $body = wp_remote_retrieve_body($response);
-    $data = json_decode($body, true);
-
-    if (isset($data['code']) && $data['code'] !== 'jwt_auth_valid_token') {
-        return new WP_Error('invalid_token', 'Invalid JWT token', array('status' => 403));
-    }
-
-    return true;
-}
-
+// Function to handle the new endpoint for listing subscribers
 // Function to handle the new endpoint for listing subscribers
 function get_subscriber_list(WP_REST_Request $request) {
     global $wpdb;
@@ -758,7 +794,7 @@ function get_subscriber_list(WP_REST_Request $request) {
     $validated_table = $wpdb->prefix . 'validated_ids'; // Make sure this matches your table name
 
     // Retrieve all subscribers and their validated IDs
-    $subscribers = $wpdb->get_results("SELECT user_email, validated_ids FROM $subs_table", ARRAY_A);
+    $subscribers = $wpdb->get_results("SELECT user_email, validated_ids, donate FROM $subs_table", ARRAY_A);
 
     // Prepare the response data
     $response_data = [];
@@ -766,14 +802,125 @@ function get_subscriber_list(WP_REST_Request $request) {
     foreach ($subscribers as $subscriber) {
         $email = $subscriber['user_email'];
         $validated_ids = maybe_unserialize($subscriber['validated_ids']);
+        $donate = $subscriber['donate'];
 
         $response_data[] = [
             'email' => $email,
             'validated_ids' => $validated_ids,
+            'donate' => $donate
         ];
     }
 
     return new WP_REST_Response($response_data, 200);
+}
+
+
+// Handle device registration request
+function register_new_device(WP_REST_Request $request) {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'registered_devices';
+
+    $chip_id = sanitize_text_field($request->get_param('chip_id'));
+    $edition = sanitize_text_field($request->get_param('edition'));
+
+    $device_data = array(
+        'chip_id' => $chip_id,
+        'edition' => $edition,
+    );
+
+    // Add logging to see what data is being received
+    error_log('Registering device with data: ' . print_r($device_data, true));
+
+    // Insert the new device record
+    $result = $wpdb->insert($table_name, $device_data);
+
+    if ($result === false) {
+        $wpdb->print_error();
+        return new WP_Error('db_insert_error', 'Failed to register device.', array('status' => 500));
+    }
+
+    return 'Device registered successfully.';
+}
+
+// Retrieve all registered devices
+function get_registered_devices(WP_REST_Request $request) {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'registered_devices';
+
+    $results = $wpdb->get_results("SELECT * FROM $table_name", ARRAY_A);
+
+    if (empty($results)) {
+        return new WP_Error('no_devices_found', 'No registered devices found.', array('status' => 404));
+    }
+
+    return $results;
+}
+// Retrieve Validated - Collected Images by a User
+function get_collected_images_by_email(WP_REST_Request $request) {
+    global $wpdb;
+    $user_email = sanitize_email($request->get_param('email'));
+
+    // Fetch collected images
+    $validated_table = $wpdb->prefix . 'validated_ids';
+    $images_table = $wpdb->prefix . 'custom_images';
+    $subs_table = $wpdb->prefix . 'custom_choice_subs';
+
+    $validated_ids = $wpdb->get_col($wpdb->prepare("SELECT validated_id FROM $validated_table WHERE user_email = %s", $user_email));
+    
+    if (empty($validated_ids)) {
+        return new WP_Error('no_images', 'No images found for this user.', array('status' => 404));
+    }
+
+    $placeholders = implode(',', array_fill(0, count($validated_ids), '%s'));
+    $collected_images = $wpdb->get_results($wpdb->prepare("SELECT * FROM $images_table WHERE id IN ($placeholders)", $validated_ids), ARRAY_A);
+
+    // Unserialize attributes field
+    foreach ($collected_images as &$image) {
+        if (!empty($image['attributes'])) {
+            $image['attributes'] = maybe_unserialize($image['attributes']);
+        }
+    }
+
+    // Fetch total number of images in the custom_images table
+    $total_images = $wpdb->get_var("SELECT COUNT(*) FROM $images_table");
+
+    // Calculate user's score
+    $user_score = (count($collected_images) / $total_images) * 100;
+
+    // Fetch donation status
+    $donate_status = $wpdb->get_var($wpdb->prepare("SELECT donate FROM $subs_table WHERE user_email = %s", $user_email));
+
+    return new WP_REST_Response(array(
+        'collected_images' => $collected_images,
+        'total_images' => (int) $total_images,
+        'user_score' => $user_score,
+        'donate' => (bool) $donate_status
+    ), 200);
+}
+
+// Handle donation status update
+function update_donation_status(WP_REST_Request $request) {
+    global $wpdb;
+    $email = sanitize_email($request->get_param('email'));
+
+    if (empty($email)) {
+        return new WP_Error('invalid_email', 'Invalid email address', array('status' => 400));
+    }
+
+    $table_name = $wpdb->prefix . 'custom_choice_subs';
+    $result = $wpdb->update(
+        $table_name,
+        array('donate' => 1),  // Always set donate to 1
+        array('user_email' => $email),
+        array('%d'),
+        array('%s')
+    );
+
+    if ($result === false) {
+        return new WP_Error('db_update_error', 'Failed to update donation status', array('status' => 500));
+    }
+
+    return new WP_REST_Response('Donation status updated successfully', 200);
 }
 
 
