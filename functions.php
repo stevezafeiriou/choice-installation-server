@@ -1,5 +1,4 @@
 <?php
-
 /* CHOICE IMPLEMENTATION STARTS HERE */
 
 /* CORS Handling Functions */
@@ -151,7 +150,7 @@ add_action('rest_api_init', function () {
     register_rest_route('choice/v1', '/devices', array(
         'methods' => 'GET',
         'callback' => 'get_registered_devices',
-        'permission_callback' => 'verify_jwt_token',
+        
     ));
 
     register_rest_route('choice/v1', '/devices', array(
@@ -345,12 +344,13 @@ function delete_custom_image_by_id($data) {
 
 // Callback function for handling POST request to validate an image
 function validate_custom_image($data) {
-    $id = sanitize_text_field($data['id']);
-
     global $wpdb;
-    $table_name = $wpdb->prefix . 'custom_images';
 
-    // Check if the image is already validated
+    $id = sanitize_text_field($data['id']);
+    $email = sanitize_email($data['email']);
+
+    // Check if image exists and is not already validated
+    $table_name = $wpdb->prefix . 'custom_images';
     $image = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_name WHERE id = %s", $id), ARRAY_A);
 
     if (!$image) {
@@ -361,7 +361,7 @@ function validate_custom_image($data) {
         return 'Image already validated.';
     }
 
-    // Update validation status
+    // Validate the image
     $result = $wpdb->update(
         $table_name,
         array('validated' => true),
@@ -374,8 +374,37 @@ function validate_custom_image($data) {
         return new WP_Error('db_update_error', 'Failed to update validation status.', array('status' => 500));
     }
 
+    // Add the validated ID to validated_ids table only if it doesn’t exist
+    $validated_table = $wpdb->prefix . 'validated_ids';
+    $subs_table = $wpdb->prefix . 'custom_choice_subs';
+
+    $existing_uuid_entry = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $validated_table WHERE validated_id = %s", $id));
+    if (!$existing_uuid_entry) {
+        $wpdb->insert(
+            $validated_table,
+            array('user_email' => $email, 'validated_id' => $id),
+            array('%s', '%s')
+        );
+    }
+
+    // Update validated_ids in custom_choice_subs
+    $existing_entry = $wpdb->get_row($wpdb->prepare("SELECT * FROM $subs_table WHERE user_email = %s", $email), ARRAY_A);
+    $current_validated_ids = $existing_entry ? maybe_unserialize($existing_entry['validated_ids']) : [];
+    $updated_ids = array_unique(array_merge($current_validated_ids, [$id]));
+
+    // Update user's validated_ids
+    $wpdb->update(
+        $subs_table,
+        array('validated_ids' => maybe_serialize($updated_ids)),
+        array('user_email' => $email),
+        array('%s'),
+        array('%s')
+    );
+
     return 'Image validated successfully.';
 }
+
+
 
 // Function to retrieve recent unvalidated images
 function get_recent_unvalidated_images() {
@@ -435,91 +464,71 @@ function get_recent_unvalidated_images() {
 }
 
 // Handle subscription request
-// Handle subscription request
 function handle_subscription(WP_REST_Request $request) {
-    // Retrieve email from request body and sanitize
+    global $wpdb;
+
     $email = sanitize_email($request->get_param('email'));
     $donate = filter_var($request->get_param('donate'), FILTER_VALIDATE_BOOLEAN);
+    $validated_ids = $request->get_param('ids');
 
-    // Validate email address
     if (!is_email($email)) {
         return new WP_Error('invalid_email', 'Invalid email address.', array('status' => 400));
     }
 
-    // Retrieve validated IDs from request body and sanitize
-    $validated_ids = $request->get_param('ids');
-
-    // Validate IDs format (assuming they are valid UUIDs)
+    // Validate and sanitize validated_ids
     foreach ($validated_ids as $uuid) {
         if (!is_string($uuid) || !preg_match('/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i', $uuid)) {
             return new WP_Error('invalid_id_format', 'Invalid UUID format.', array('status' => 400));
         }
     }
 
-    // Limit to 9 validated IDs per email
-    if (count($validated_ids) > 9) {
-        return new WP_Error('too_many_ids', 'Only up to 9 validated IDs are allowed per email.', array('status' => 400));
-    }
+    $subs_table = $wpdb->prefix . 'custom_choice_subs';
+    $validated_table = $wpdb->prefix . 'validated_ids';
 
-    global $wpdb;
-    $subs_table = $wpdb->prefix . 'custom_choice_subs'; // Make sure this matches your table name
-    $validated_table = $wpdb->prefix . 'validated_ids'; // Make sure this matches your table name
-
-    // Check for unique validated IDs across all emails
-    foreach ($validated_ids as $uuid) {
-        $existing_entry = $wpdb->get_var($wpdb->prepare("SELECT user_email FROM $validated_table WHERE validated_id = %s", $uuid));
-        if ($existing_entry && $existing_entry !== $email) {
-            return new WP_Error('id_already_taken', "The validated ID '$uuid' is already used by another email address.", array('status' => 400));
-        }
-    }
-
-    // Check if email already exists in the subscriptions table
+    // Check if user already exists
     $existing_entry = $wpdb->get_row($wpdb->prepare("SELECT * FROM $subs_table WHERE user_email = %s", $email), ARRAY_A);
 
     if ($existing_entry) {
-        // Email already exists, update validated IDs and donate status
+        // User exists, update validated_ids and donation status
         $current_validated_ids = maybe_unserialize($existing_entry['validated_ids']);
         $updated_ids = array_unique(array_merge($current_validated_ids, $validated_ids));
 
-        // Limit to 9 validated IDs
-        if (count($updated_ids) > 9) {
-            return new WP_Error('too_many_ids', 'Only up to 9 validated IDs are allowed per email.', array('status' => 400));
+        // Add only new validated IDs to validated_ids table
+        foreach ($validated_ids as $uuid) {
+            $existing_uuid_entry = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $validated_table WHERE validated_id = %s", $uuid));
+            if (!$existing_uuid_entry) {
+                $wpdb->insert(
+                    $validated_table,
+                    array('user_email' => $email, 'validated_id' => $uuid),
+                    array('%s', '%s')
+                );
+            }
         }
 
-        // Update the record in the subscriptions table
+        // Update user's validated_ids and donation status
         $wpdb->update(
             $subs_table,
             array(
                 'validated_ids' => maybe_serialize($updated_ids),
-                'donate' => $donate
+                'donate' => $donate,
             ),
             array('user_email' => $email),
             array('%s', '%d'),
             array('%s')
         );
-
-        // Update validated IDs table
-        $wpdb->delete($validated_table, array('user_email' => $email), array('%s'));
-        foreach ($updated_ids as $uuid) {
-            $wpdb->insert(
-                $validated_table,
-                array('user_email' => $email, 'validated_id' => $uuid),
-                array('%s', '%s')
-            );
-        }
     } else {
-        // Email does not exist, create new record
+        // New user, insert into subs_table and validated_ids table
         $wpdb->insert(
             $subs_table,
             array(
                 'user_email' => $email,
                 'validated_ids' => maybe_serialize($validated_ids),
-                'donate' => $donate
+                'donate' => $donate,
             ),
             array('%s', '%s', '%d')
         );
 
-        // Insert into validated IDs table
+        // Insert into validated_ids table
         foreach ($validated_ids as $uuid) {
             $wpdb->insert(
                 $validated_table,
@@ -530,25 +539,19 @@ function handle_subscription(WP_REST_Request $request) {
 
         // Send email notification for new subscriber
         $subject = 'New subscriber from "CHOICE V5.3 INSTALLATION"';
-        $message = "New subscriber details:\n\n";
-        $message .= "Email: $email\n";
-
+        $message = "New subscriber details:\n\nEmail: $email\n";
         $headers = array(
             'From: CHOICE V5.3 INSTALLATION <noreply@stevezafeiriou.com>',
             'Content-Type: text/plain; charset=UTF-8',
         );
 
-        // Send email
-        $email_sent = wp_mail(get_option('admin_email'), $subject, $message, $headers);
-
-        if (!$email_sent) {
-            // Handle email sending failure if needed
-            error_log('Failed to send email notification for new subscriber.');
-        }
+        wp_mail(get_option('admin_email'), $subject, $message, $headers);
     }
 
     return 'User subscribed successfully.';
 }
+
+
 
 
 // Handle update request
@@ -930,3 +933,5 @@ function add_custom_upload_mimes($existing_mimes) {
 add_filter('upload_mimes', 'add_custom_upload_mimes');
 
 /* CHOICE IMPLEMENTATION ENDS HERE */
+
+>
