@@ -1,8 +1,5 @@
 <?php
 
-
-
-
 /* CHOICE IMPLEMENTATION STARTS HERE */
 
 /* CORS Handling Functions */
@@ -12,8 +9,8 @@ function add_cors_headers() {
     $allowed_origins = [
         'https://choice.stevezafeiriou.com',
         'https://www.choice.stevezafeiriou.com',
-        'http://192.168.237.253:3000',
-      //'http://192.168.237.249:3000',
+//         'http://192.168.237.253:3000',
+      // 'http://192.168.237.249:3000',
     ];
 
     $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
