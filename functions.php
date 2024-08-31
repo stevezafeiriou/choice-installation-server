@@ -1,4 +1,5 @@
 <?php
+
 /* CHOICE IMPLEMENTATION STARTS HERE */
 
 /* CORS Handling Functions */
@@ -45,6 +46,8 @@ function add_cors_headers_to_rest_endpoints($value, $server) {
         '/wp-json/choice/v1/devices',
         '/wp-json/choice/v1/devices/total',
 		'/wp-json/choice/v1/collected',
+		'/wp-json/choice/v1/survey-responses',
+		'/wp-json/choice/v1/get-surveys',
     ];
 
     $request_uri = $_SERVER['REQUEST_URI'];
@@ -164,9 +167,20 @@ add_action('rest_api_init', function () {
         'callback' => 'get_collected_images_by_email',
     ));
 	
+	register_rest_route('choice/v1', '/survey-responses', array(
+        'methods' => 'POST',
+        'callback' => 'save_survey_responses',
+        
+    ));
+	
+	 register_rest_route('choice/v1', '/get-surveys', array(
+        'methods' => 'GET',
+        'callback' => 'get_all_survey_responses',
+        'permission_callback' => 'verify_jwt_token',
+    ));
+	
 });
 
-// Callback functions for endpoints (include your existing implementations here)
 // Callback function for handling POST request to create a new image
 function create_custom_image($data) {
     global $wpdb;
@@ -923,6 +937,73 @@ function update_donation_status(WP_REST_Request $request) {
     return new WP_REST_Response('Donation status updated successfully', 200);
 }
 
+// Callback function to save survey responses
+function save_survey_responses(WP_REST_Request $request) {
+    global $wpdb;
+
+    $data = $request->get_json_params();
+    $uuid = isset($data['uuid']) ? sanitize_text_field($data['uuid']) : '';
+    $answers = isset($data['answers']) ? $data['answers'] : [];
+
+    if (empty($uuid) || empty($answers)) {
+        return new WP_Error('no_data', 'UUID or answers are missing.', array('status' => 400));
+    }
+
+    $table_name = $wpdb->prefix . 'survey_responses';
+
+    foreach ($answers as $answer) {
+        $wpdb->insert(
+            $table_name,
+            array(
+                'uuid' => $uuid,
+                'question_id' => sanitize_text_field($answer['questionId']),
+                'answer' => sanitize_text_field($answer['answer']),
+                'timestamp' => current_time('mysql'),
+            ),
+            array(
+                '%s',
+                '%d',
+                '%s',
+                '%s',
+            )
+        );
+    }
+
+    return new WP_REST_Response('Survey responses saved successfully', 200);
+}
+
+// Get All Surveys by UUID
+function get_all_survey_responses() {
+    global $wpdb;
+
+    // Query to get all survey responses
+    $table_name = $wpdb->prefix . 'survey_responses';
+    $results = $wpdb->get_results("SELECT * FROM $table_name ORDER BY uuid, id", ARRAY_A);
+
+    if (empty($results)) {
+        return new WP_Error('no_data', 'No survey responses found.', array('status' => 404));
+    }
+
+    // Group the results by UUID
+    $grouped_responses = array();
+    foreach ($results as $response) {
+        $uuid = $response['uuid'];
+
+        if (!isset($grouped_responses[$uuid])) {
+            $grouped_responses[$uuid] = array();
+        }
+
+        $grouped_responses[$uuid][] = array(
+            'question_id' => $response['question_id'],
+            'answer' => $response['answer'],
+            'timestamp' => $response['timestamp']
+        );
+    }
+
+    return new WP_REST_Response($grouped_responses, 200);
+}
+
+
 
 // Allow .bin file uploads
 function add_custom_upload_mimes($existing_mimes) {
@@ -931,6 +1012,8 @@ function add_custom_upload_mimes($existing_mimes) {
     return $existing_mimes;
 }
 add_filter('upload_mimes', 'add_custom_upload_mimes');
+
+
 
 /* CHOICE IMPLEMENTATION ENDS HERE */
 
